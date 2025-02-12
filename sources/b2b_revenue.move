@@ -1,15 +1,10 @@
-module kgen::B2BRevenueV1 {
+module kgen::B2BRevenueV2 {
     use std::signer;
-    use aptos_framework::coin;
-    use aptos_framework::aptos_account;
-    use aptos_framework::aptos_coin;
     use std::vector;
     use std::table;
-    use aptos_std::string;
     use aptos_framework::object::{Self, Object};
     use aptos_framework::fungible_asset::{Metadata};
     use aptos_framework::primary_fungible_store;
-    use std::debug::print;
     use aptos_framework::account::{Self};
     const E_NOT_WHITELISTED: u64 = 1001;
     const E_NOT_ADMIN: u64 = 1002;
@@ -17,7 +12,7 @@ module kgen::B2BRevenueV1 {
     const E_INSUFFICIENT_BALANCE: u64 = 1004;
     const CORE_ADDRESS: address = @kgen;
      
-    const SEED: vector<u8> = b"b2c-revenue";
+    const SEED: vector<u8> = b"b2c-revenue-v2";
     struct Whitelist has key {
         accounts: vector<address>,
         admin: address,
@@ -26,7 +21,6 @@ module kgen::B2BRevenueV1 {
 
 // wallet_addresse => token_address=>value
     struct Balances has key {
-        balances: table::Table<address, u64>,
         tokenbalances: table::Table<address, u64>,
     }
     inline fun get_metadata_object(object: address): Object<Metadata> {
@@ -42,8 +36,7 @@ module kgen::B2BRevenueV1 {
             admin: caller_address,
             accounts: vector[]
         });
-
-        move_to(admin, Balances { balances: table::new<address, u64>() ,tokenbalances : table::new<address, u64>()  });
+    move_to(admin, Balances {tokenbalances : table::new<address, u64>()  })
     }
     fun get_resource_account_sign(): signer acquires Whitelist {
         account::create_signer_with_capability(
@@ -99,7 +92,7 @@ public fun is_token_whitelisted(token: address): bool acquires WhitelistTokens {
         whitelist_ref.accounts.push_back(account);
     }
 
-    public fun get_whitelist(admin: &signer): vector<address> acquires Whitelist {
+    public fun get_whitelist(): vector<address> acquires Whitelist {
         let whitelist_ref = borrow_global<Whitelist>(CORE_ADDRESS);
         whitelist_ref.accounts
     }
@@ -125,15 +118,10 @@ public fun is_token_whitelisted(token: address): bool acquires WhitelistTokens {
     }
 
 public entry fun deposit(user: &signer, token: address, amount: u64) acquires Balances , Whitelist,WhitelistTokens{
-    let caller_address = signer::address_of(user);
     assert!(amount > 0, E_INVALID_AMOUNT);
-   assert!(is_token_whitelisted(token),E_NOT_WHITELISTED);
+    assert!(is_token_whitelisted(token),E_NOT_WHITELISTED);
     let balance_ref = borrow_global_mut<Balances>(CORE_ADDRESS);
-    let current_balance = if (table::contains(&balance_ref.balances, caller_address)) {
-        *table::borrow_mut(&mut balance_ref.balances, caller_address)
-    } else {
-        0
-    };
+
     let token_balance =  if (table::contains(&balance_ref.tokenbalances, token)) {
         *table::borrow_mut(&mut balance_ref.tokenbalances, token)
     } else {
@@ -146,18 +134,13 @@ public entry fun deposit(user: &signer, token: address, amount: u64) acquires Ba
         signer::address_of(treasury), 
         amount
     );
-    let new_balance = current_balance + amount;
     let new_token_balance = token_balance + amount;
      if (table::contains(&balance_ref.tokenbalances, token)) {
         *table::borrow_mut(&mut balance_ref.tokenbalances, token) = new_token_balance;
     } else {
         table::add(&mut balance_ref.tokenbalances, token, new_token_balance);
     };
-    if (table::contains(&balance_ref.balances, caller_address)) {
-        *table::borrow_mut(&mut balance_ref.balances, caller_address) = new_balance;
-    } else {
-        table::add(&mut balance_ref.balances, caller_address, new_balance);
-    };
+
 }
 
 public entry fun withdraw(user: &signer, token: address, amount: u64,to:address) acquires Balances, Whitelist,WhitelistTokens {
@@ -183,25 +166,6 @@ fun is_admin(caller: address): bool acquires Whitelist {
         whitelist_ref.admin == caller
     }
 
-#[view]
-public fun get_admin_balance(user: address, token_address: address): u64 acquires Balances {
-    let balances_ref = borrow_global<Balances>(CORE_ADDRESS);
-    if (!table::contains(&balances_ref.balances, user)) {
-        return 0;
-    };
-    let balance_ref = table::borrow(&balances_ref.balances, user);
-    *balance_ref
-}
-// not used anymore 
-#[view]
-public fun get_token_balance(user: address, token_address: address): u64 acquires Balances {
-    let balances_ref = borrow_global<Balances>(CORE_ADDRESS);
-    if (!table::contains(&balances_ref.tokenbalances, token_address)) {
-        return 0;
-    };
-    let balance_ref = table::borrow(&balances_ref.tokenbalances, token_address);
-    *balance_ref
-}
 #[view]
 public fun get_token_balance_v1(token_address: address): u64 acquires Balances {
     let balances_ref = borrow_global<Balances>(CORE_ADDRESS);
