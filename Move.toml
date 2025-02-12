@@ -1,0 +1,15 @@
+[package]
+name = "B2BRevenueV1"
+version = "1.0.2"
+authors = []
+
+[addresses]
+kgen="0xedfd5881e08eceb66d07adeb309ba9a4b7d10ce22780096f16bec49868a0c862"
+[dev-addresses]
+
+[dependencies.AptosFramework]
+git = "https://github.com/aptos-labs/aptos-framework.git"
+rev = "mainnet"
+subdir = "aptos-framework"
+
+[dev-dependencies]
