@@ -6,6 +6,7 @@ module KGENB2B::B2BRevenue_V1 {
     use aptos_framework::fungible_asset::{Metadata};
     use aptos_framework::primary_fungible_store;
     use aptos_framework::account::{Self};
+    use aptos_framework::error;
     const E_NOT_WHITELISTED: u64 = 1001;
     const E_NOT_ADMIN: u64 = 1002;
     const E_INVALID_AMOUNT: u64 = 1003;
@@ -40,7 +41,7 @@ inline fun get_metadata_object(object: address): Object<Metadata> {
 
 public entry fun initialize(admin: &signer) {
         let caller_address = signer::address_of(admin);
-        assert!(caller_address == CORE_ADDRESS, E_NOT_ADMIN);
+        assert!(caller_address == CORE_ADDRESS,error::permission_denied( E_NOT_ADMIN));
         let (_, treasury_account_cap) = account::create_resource_account(admin, SEED);
         move_to(admin, Whitelist {
             revenue_account_cap:treasury_account_cap,
@@ -59,9 +60,9 @@ fun get_resource_account_sign(): signer acquires Whitelist {
 
 public entry fun add_whitelist_token(admin: &signer, token: address) acquires WhitelistTokens,Whitelist {
     let caller_address = signer::address_of(admin);
-    assert!(is_admin(caller_address), E_NOT_ADMIN);
+    assert!(is_admin(caller_address),error::permission_denied(E_NOT_ADMIN));
     let whitelist_ref = borrow_global_mut<WhitelistTokens>(CORE_ADDRESS);
-    assert!(!table::contains(&whitelist_ref.tokens, token),E_TOKEN_ALREDY_WHITELISTED);
+    assert!(!table::contains(&whitelist_ref.tokens, token),error::already_exists(E_TOKEN_ALREDY_WHITELISTED));
     table::upsert(
         &mut whitelist_ref.tokens,
         token,
@@ -80,17 +81,17 @@ public fun is_token_whitelisted(token: address): bool acquires WhitelistTokens {
 
 public entry fun add_whitelist_address(admin: &signer, account: address) acquires Whitelist {
         let caller_address = signer::address_of(admin);
-        assert!(is_admin(caller_address), E_NOT_ADMIN);
+        assert!(is_admin(caller_address),error::permission_denied(E_NOT_ADMIN) );
         let whitelist_ref = borrow_global_mut<Whitelist>(CORE_ADDRESS);
-        assert!(!vector::contains(&whitelist_ref.accounts,&account),E_ALREADY_WHITELISTED);
+        assert!(!vector::contains(&whitelist_ref.accounts,&account),error::already_exists(E_ALREADY_WHITELISTED));
         whitelist_ref.accounts.push_back(account);
     }
 
 public entry fun remove_from_admin_whitelist(admin: &signer, account: address) acquires Whitelist {
         let caller_address = signer::address_of(admin);
-        assert!(is_admin(caller_address), E_NOT_ADMIN);
+        assert!(is_admin(caller_address),error::permission_denied(E_NOT_ADMIN));
         let whitelist_ref = borrow_global_mut<Whitelist>(CORE_ADDRESS);
-        assert!(!vector::contains(&whitelist_ref.accounts,&account),E_NOT_WHITELISTED);
+        assert!(vector::contains(&whitelist_ref.accounts,&account),error::not_found(E_NOT_WHITELISTED));
         let  index = 0;
         let length = vector::length(&whitelist_ref.accounts);
 
@@ -105,8 +106,8 @@ public entry fun remove_from_admin_whitelist(admin: &signer, account: address) a
     }
 
 public entry fun deposit(user: &signer, token: address, amount: u64) acquires Balances , Whitelist,WhitelistTokens{
-    assert!(amount > 0, E_INVALID_AMOUNT);
-    assert!(is_token_whitelisted(token),E_NOT_WHITELISTED_TOKEN);
+    assert!(amount > 0,error::invalid_argument(E_INVALID_AMOUNT));
+    assert!(is_token_whitelisted(token),error::not_found(E_NOT_WHITELISTED_TOKEN));
     let balance_ref = borrow_global_mut<Balances>(CORE_ADDRESS);
 
     let token_balance =  if (table::contains(&balance_ref.tokenbalances, token)) {
@@ -132,12 +133,12 @@ public entry fun deposit(user: &signer, token: address, amount: u64) acquires Ba
 
 public entry fun withdraw(user: &signer, token: address, amount: u64,to:address) acquires Balances, Whitelist,WhitelistTokens {
     let caller_address = signer::address_of(user);
-    assert!(amount > 0, E_INVALID_AMOUNT);
-    assert!(is_admin(caller_address), E_NOT_ADMIN);
-    assert!(is_token_whitelisted(token),E_NOT_WHITELISTED_TOKEN);
+    assert!(amount > 0, error::invalid_argument( E_INVALID_AMOUNT));
+    assert!(is_admin(caller_address),error::permission_denied(E_NOT_ADMIN));
+    assert!(is_token_whitelisted(token),error::not_found(E_NOT_WHITELISTED_TOKEN));
     let balance_ref = borrow_global_mut<Balances>(CORE_ADDRESS);
     let current_token_balance = table::borrow_mut(&mut balance_ref.tokenbalances, token);
-    assert!(*current_token_balance >= amount, E_INSUFFICIENT_BALANCE);
+    assert!(*current_token_balance >= amount,error::invalid_argument( E_INSUFFICIENT_BALANCE));
     *current_token_balance = *current_token_balance - amount;
     let treasury = &get_resource_account_sign();
     primary_fungible_store::transfer(
